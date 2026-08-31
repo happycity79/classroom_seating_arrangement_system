@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧教室座位安排系統</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter / Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        .seat-card { transition: all 0.2s ease; }
+        .seat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        @media print {
+            body * { visibility: hidden; }
+            #printable-area, #printable-area * { visibility: visible; }
+            #printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-indigo-600 text-white shadow-md no-print">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center">
+            <div class="flex items-center space-x-3 mb-2 md:mb-0">
+                <div class="bg-white/10 p-2.5 rounded-xl"><i class="fa-solid fa-chalkboard-user text-2xl"></i></div>
+                <div>
+                    <h1 class="text-xl font-bold">智慧教室座位安排系統</h1>
+                    <p class="text-xs text-indigo-200">學生管理、性別標記、梅花座男女間隔、拖拉調位與儲存匯出</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="switchTab('students')" id="btn-tab-students" class="px-4 py-2 rounded-lg bg-indigo-700 text-sm font-medium transition flex items-center space-x-2">
+                    <i class="fa-solid fa-users"></i><span>學生與名單</span>
+                </button>
+                <button onclick="switchTab('config')" id="btn-tab-config" class="px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700/50 transition flex items-center space-x-2">
+                    <i class="fa-solid fa-sliders"></i><span>版面與限制</span>
+                </button>
+                <button onclick="switchTab('seating')" id="btn-tab-seating" class="px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700/50 transition flex items-center space-x-2">
+                    <i class="fa-solid fa-th"></i><span>座位表預覽</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 py-6">
+
+        <!-- TAB 1: 學生與名單管理 -->
+        <section id="tab-students" class="space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 新增/編輯學生表單 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
+                    <h2 id="form-title" class="text-lg font-bold text-slate-800 mb-4 flex items-center space-x-2">
+                        <i class="fa-solid fa-user-plus text-indigo-600"></i><span id="form-title-text">新增學生資料</span>
+                    </h2>
+                    <form id="add-student-form" onsubmit="saveStudent(event)" class="space-y-4">
+                        <input type="hidden" id="edit-student-id" value="">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">座號</label>
+                            <input type="number" id="student-number" required min="1" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="例如: 1">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">姓名</label>
+                            <input type="text" id="student-name" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="例如: 王小明">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">性別 (梅花座男女間隔用)</label>
+                            <select id="student-gender" required class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                                <option value="M">男 (Male)</option>
+                                <option value="F">女 (Female)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">身分標籤與職位/科目</label>
+                            <div class="space-y-3 pt-1">
+                                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                                    <label class="flex items-center space-x-2 text-sm font-medium text-slate-700 cursor-pointer">
+                                        <input type="checkbox" id="tag-cadre" onchange="toggleTagInput('cadre')" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                                        <span>班級幹部</span>
+                                    </label>
+                                    <div id="cadre-input-wrap" class="hidden pl-6">
+                                        <input type="text" id="cadre-title" placeholder="輸入幹部職位 (例如: 班長、風紀)" class="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+                                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                                    <label class="flex items-center space-x-2 text-sm font-medium text-slate-700 cursor-pointer">
+                                        <input type="checkbox" id="tag-tutor" onchange="toggleTagInput('tutor')" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                                        <span>小老師</span>
+                                    </label>
+                                    <div id="tutor-input-wrap" class="hidden pl-6">
+                                        <input type="text" id="tutor-subject" placeholder="輸入小老師科目 (例如: 數學、英文)" class="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button type="submit" id="submit-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-xl transition text-sm shadow-sm shadow-indigo-200">
+                                加入學生
+                            </button>
+                            <button type="button" id="cancel-edit-btn" onclick="resetStudentForm()" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2.5 px-3 rounded-xl transition text-sm">
+                                取消
+                            </button>
+                        </div>
+                    </form>
+                    <div class="mt-6 pt-6 border-t border-slate-100">
+                        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">批次匯入 / 範例</h3>
+                        <div class="flex space-x-2">
+                            <button onclick="loadSampleData()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 px-3 rounded-xl transition text-xs">
+                                載入範例資料 (30人)
+                            </button>
+                            <button onclick="openImportModal()" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium py-2 px-3 rounded-xl transition text-xs">
+                                外部批次匯入
+                            </button>
+                        </div>
+                        <div class="mt-2">
+                            <button onclick="clearAllStudents()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 px-3 rounded-xl transition text-xs">
+                                清空全部
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 學生列表展示 -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                                <i class="fa-solid fa-address-book text-indigo-600"></i><span>學生總名單</span>
+                                <span id="student-count-badge" class="bg-indigo-50 text-indigo-600 text-xs px-2.5 py-0.5 rounded-full font-semibold">0 人</span>
+                            </h2>
+                        </div>
+                        <div class="w-full sm:w-auto">
+                            <input type="text" id="student-search" oninput="renderStudentList()" placeholder="搜尋姓名或座號..." class="w-full sm:w-64 px-3 py-1.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div class="flex-grow overflow-y-auto max-h-[500px] border border-slate-100 rounded-xl">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead class="bg-slate-50 sticky top-0 text-xs font-semibold text-slate-500 uppercase">
+                                <tr>
+                                    <th class="p-3">座號</th>
+                                    <th class="p-3">姓名</th>
+                                    <th class="p-3">性別</th>
+                                    <th class="p-3">身分標籤</th>
+                                    <th class="p-3 text-right">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="student-table-body" class="divide-y divide-slate-100">
+                                <!-- 動態插入學生 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: 版面與排座限制設定 -->
+        <section id="tab-config" class="hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- 教室格局設定 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                        <i class="fa-solid fa-grid-2 text-indigo-600"></i><span>教室空間與講台方位設定</span>
+                    </h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">行數 (Columns)</label>
+                            <input type="number" id="grid-cols" value="6" min="2" max="10" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">列數 (Rows)</label>
+                            <input type="number" id="grid-rows" value="6" min="2" max="10" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">講台方位 (Podium Position)</label>
+                        <select id="podium-direction" onchange="updatePodiumPosition()" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                            <option value="top">上方 (Top)</option>
+                            <option value="bottom">下方 (Bottom)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">排座演算法模式</label>
+                        <select id="allocation-mode" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+                            <option value="random">完全隨機分配</option>
+                            <option value="checkerboard">梅花座 (男女間隔座)</option>
+                            <option value="cadre-front">幹部優先安排在靠近講台排</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 特殊限制條件 -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center space-x-2">
+                        <i class="fa-solid fa-shield-halved text-indigo-600"></i><span>特殊不相鄰限制 (黑名單/互斥)</span>
+                    </h2>
+                    <p class="text-xs text-slate-500">指定哪兩位學生「絕對不能相鄰」（前後左右或斜對角）。</p>
+                    <div class="flex space-x-2">
+                        <select id="conflict-student-1" class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <!-- 動態填充 -->
+                        </select>
+                        <span class="self-center text-xs font-bold text-slate-400">不與</span>
+                        <select id="conflict-student-2" class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <!-- 動態填充 -->
+                        </select>
+                        <button onclick="addConflictPair()" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-sm transition">新增</button>
+                    </div>
+                    <div class="mt-4">
+                        <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">已設定的互斥清單</h3>
+                        <div id="conflict-list-container" class="space-y-2 max-h-[160px] overflow-y-auto">
+                            <p class="text-xs text-slate-400 italic">尚未設定任何互斥條件</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 開始排座大按鈕 -->
+            <div class="flex justify-center pt-4">
+                <button onclick="generateSeatingChart()" class="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold py-3.5 px-8 rounded-2xl shadow-lg shadow-indigo-200 transition transform hover:-translate-y-0.5 flex items-center space-x-3 text-base">
+                    <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
+                    <span>立即自動排定座位</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- TAB 3: 座位表預覽與匯出 -->
+        <section id="tab-seating" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col space-y-6">
+                <!-- 控制與匯出工具列 -->
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4 no-print">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm font-bold text-slate-700">檢視模式：</span>
+                            <button onclick="setSeatingView('grid')" id="view-grid-btn" class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold">教室視覺圖 (可拖拉調位)</button>
+                            <button onclick="setSeatingView('list')" id="view-list-btn" class="px-3 py-1.5 rounded-lg text-slate-600 text-xs font-semibold hover:bg-slate-100">座號清單</button>
+                        </div>
+                        <div class="flex items-center space-x-2 bg-slate-100 px-3 py-1.5 rounded-lg">
+                            <label class="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                                <input type="checkbox" id="show-gender-badge" onchange="renderSeatingDisplay(); renderSeatingListTable();" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" checked>
+                                <span>顯示性別標記 (♂/♀)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="openSaveModal()" class="bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm">
+                            <i class="fa-solid fa-floppy-disk"></i><span>儲存座位表</span>
+                        </button>
+                        <button onclick="openLoadModal()" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm">
+                            <i class="fa-solid fa-folder-open"></i><span>讀取已存座位表</span>
+                        </button>
+                        <button onclick="generateSeatingChart()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5">
+                            <i class="fa-solid fa-rotate-right"></i><span>重新隨機</span>
+                        </button>
+                        <button onclick="exportToWord()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm">
+                            <i class="fa-solid fa-file-word"></i><span>匯出 Word (DOC)</span>
+                        </button>
+                        <button onclick="exportToCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm">
+                            <i class="fa-solid fa-file-csv"></i><span>匯出 CSV</span>
+                        </button>
+                        <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm">
+                            <i class="fa-solid fa-print"></i><span>列印 / 存成 PDF</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 提示：拖拉調位說明 -->
+                <div id="swap-hint" class="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between no-print">
+                    <span><i class="fa-solid fa-circle-info mr-1.5"></i>提示：按住任一座位卡片並拖曳至其他座位卡片上方即可互換位置！</span>
+                </div>
+
+                <!-- 可列印區域 (Printable Area) -->
+                <div id="printable-area" class="bg-slate-50/50 p-6 rounded-2xl border border-slate-200/80 space-y-6 flex flex-col items-center">
+                    <!-- 講台與網格動態配置 -->
+                    <div id="layout-container" class="flex flex-col items-center w-full gap-6">
+                        <!-- 講台 -->
+                        <div id="podium-container" class="w-full flex justify-center order-1">
+                            <div class="bg-slate-800 text-white text-center py-2.5 px-16 rounded-xl text-sm font-bold shadow-sm tracking-widest">
+                                講 台
+                            </div>
+                        </div>
+
+                        <!-- 視覺化網格座位區 -->
+                        <div id="seating-grid-container" class="flex justify-center overflow-x-auto w-full py-2 order-2">
+                            <!-- 動態網格 -->
+                        </div>
+                    </div>
+
+                    <!-- 清單式檢視區 (預設隱藏) -->
+                    <div id="seating-list-container" class="hidden overflow-x-auto w-full">
+                        <table class="w-full text-left border-collapse bg-white rounded-xl shadow-sm text-sm">
+                            <thead class="bg-slate-100 text-xs font-semibold text-slate-500 uppercase">
+                                <tr>
+                                    <th class="p-3">座位代號</th>
+                                    <th class="p-3">座號</th>
+                                    <th class="p-3">姓名</th>
+                                    <th class="p-3" id="th-gender-col">性別</th>
+                                    <th class="p-3">身分與職位/科目</th>
+                                </tr>
+                            </thead>
+                            <tbody id="seating-table-body" class="divide-y divide-slate-100">
+                                <!-- 動態清單 -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 幹部與小老師總表 -->
+                    <div class="mt-8 pt-6 border-t border-slate-200 w-full">
+                        <h3 class="text-base font-bold text-slate-800 mb-3 flex items-center space-x-2">
+                            <i class="fa-solid fa-id-badge text-indigo-600"></i><span>班級幹部與小老師總表</span>
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- 幹部總表 -->
+                            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                                <h4 class="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2 flex items-center space-x-1">
+                                    <i class="fa-solid fa-user-shield"></i><span>班級幹部名單</span>
+                                </h4>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-xs text-left">
+                                        <thead class="bg-amber-50 text-amber-900">
+                                            <tr>
+                                                <th class="p-2 rounded-l-lg">職位</th>
+                                                <th class="p-2">座號</th>
+                                                <th class="p-2">姓名</th>
+                                                <th class="p-2 rounded-r-lg">目前座位</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cadre-summary-tbody" class="divide-y divide-slate-100">
+                                            <!-- 動態填入 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <!-- 小老師總表 -->
+                            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                                <h4 class="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-2 flex items-center space-x-1">
+                                    <i class="fa-solid fa-book-open-reader"></i><span>小老師名單</span>
+                                </h4>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-xs text-left">
+                                        <thead class="bg-purple-50 text-purple-900">
+                                            <tr>
+                                                <th class="p-2 rounded-l-lg">科目</th>
+                                                <th class="p-2">座號</th>
+                                                <th class="p-2">姓名</th>
+                                                <th class="p-2 rounded-r-lg">目前座位</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tutor-summary-tbody" class="divide-y divide-slate-100">
+                                            <!-- 動態填入 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="custom-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 id="modal-title" class="text-base font-bold text-slate-800">提示訊息</h3>
+            <p id="modal-message" class="text-sm text-slate-600">內容...</p>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 儲存座位表 Modal -->
+    <div id="save-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
+                <i class="fa-solid fa-floppy-disk text-violet-600"></i><span>儲存目前座位表</span>
+            </h3>
+            <p class="text-xs text-slate-500">為此排座位表命名，方便日後隨時查閱或載入：</p>
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">座位表名稱</label>
+                <input type="text" id="save-chart-name" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm" placeholder="例如: 115學年度上學期第一次定期考查座位表">
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeSaveModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition">取消</button>
+                <button onclick="confirmSaveChart()" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm">確認儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 載入座位表 Modal -->
+    <div id="load-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
+                <i class="fa-solid fa-folder-open text-amber-600"></i><span>載入已儲存的座位表</span>
+            </h3>
+            <p class="text-xs text-slate-500">選擇先前儲存過的座位表：</p>
+            <div id="saved-charts-list" class="space-y-2 max-h-[300px] overflow-y-auto border border-slate-100 p-2 rounded-xl">
+                <!-- 動態載入已儲存清單 -->
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeLoadModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 外部批次匯入 Modal -->
+    <div id="import-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 class="text-base font-bold text-slate-800 flex items-center space-x-2">
+                <i class="fa-solid fa-file-import text-indigo-600"></i><span>外部名單批次匯入</span>
+            </h3>
+            <p class="text-xs text-slate-500">請貼上學生名單文字。每行一位學生，支援格式：<br>1. <b>座號 姓名 性別(男/女/M/F)</b> (例如: 1 王小明 男)<br>2. <b>座號 姓名</b> (預設為男)</p>
+            <div>
+                <textarea id="import-textarea" rows="8" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono" placeholder="1 王小明 男&#10;2 李美玲 女&#10;3 張偉豪 M"></textarea>
+            </div>
+            <div class="flex items-center space-x-2">
+                <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="import-overwrite" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" checked>
+                    <span>匯入前清空現有學生名單</span>
+                </label>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeImportModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition">取消</button>
+                <button onclick="confirmImportStudents()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm">確認匯入</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全域狀態資料
+        let students = [];
+        let conflictPairs = [];
+        let currentSeating = { grid: null, rows: 6, cols: 6 };
+        let seatingViewMode = 'grid';
+        let draggedSeat = null;
+
+        // 初始化載入
+        window.onload = function() {
+            loadSampleData();
+            updateConflictDropdowns();
+        };
+
+        // 頁籤切換
+        function switchTab(tabId) {
+            ['students', 'config', 'seating'].forEach(id => {
+                document.getElementById(`tab-${id}`).classList.add('hidden');
+                document.getElementById(`btn-tab-${id}`).classList.remove('bg-indigo-700', 'shadow-sm');
+                document.getElementById(`btn-tab-${id}`).classList.add('hover:bg-indigo-700/50');
+            });
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`btn-tab-${tabId}`).classList.add('bg-indigo-700', 'shadow-sm');
+            document.getElementById(`btn-tab-${tabId}`).classList.remove('hover:bg-indigo-700/50');
+
+            if(tabId === 'seating') {
+                if(!currentSeating.grid) {
+                    generateSeatingChart();
+                } else {
+                    updatePodiumPosition();
+                }
+            }
+        }
+
+        // 自定義訊息框
+        function showModal(title, message) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            document.getElementById('custom-modal').classList.remove('hidden');
+        }
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        // 儲存與載入 Modal 控制
+        function openSaveModal() {
+            if(!currentSeating.grid) {
+                showModal("提示", "目前尚無排好的座位表可供儲存！");
+                return;
+            }
+            document.getElementById('save-chart-name').value = `座位表_${new Date().toISOString().slice(0,10)}_${new Date().toTimeString().slice(0,5).replace(':','')}`;
+            document.getElementById('save-modal').classList.remove('hidden');
+        }
+        function closeSaveModal() {
+            document.getElementById('save-modal').classList.add('hidden');
+        }
+        function confirmSaveChart() {
+            const name = document.getElementById('save-chart-name').value.trim();
+            if(!name) {
+                showModal("注意", "請輸入座位表名稱！");
+                return;
+            }
+
+            const chartData = {
+                id: Date.now(),
+                name: name,
+                date: new Date().toLocaleString(),
+                rows: currentSeating.rows,
+                cols: currentSeating.cols,
+                podium: document.getElementById('podium-direction').value,
+                grid: currentSeating.grid,
+                students: students
+            };
+
+            let savedList = JSON.parse(localStorage.getItem('classroom_saved_charts') || '[]');
+            savedList.push(chartData);
+            localStorage.setItem('classroom_saved_charts', JSON.stringify(savedList));
+
+            closeSaveModal();
+            showModal("儲存成功", `已成功將「${name}」儲存至瀏覽器！`);
+        }
+
+        function openLoadModal() {
+            const listContainer = document.getElementById('saved-charts-list');
+            listContainer.innerHTML = '';
+
+            let savedList = JSON.parse(localStorage.getItem('classroom_saved_charts') || '[]');
+            if(savedList.length === 0) {
+                listContainer.innerHTML = `<p class="text-xs text-slate-400 italic text-center py-6">目前沒有任何已儲存的座位表記錄</p>`;
+            } else {
+                savedList.forEach((chart) => {
+                    listContainer.innerHTML += `
+                        <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 hover:bg-slate-100/80 transition">
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-800">${chart.name}</h4>
+                                <p class="text-[10px] text-slate-500">儲存時間: ${chart.date} | 規格: ${chart.rows}列 x ${chart.cols}行</p>
+                            </div>
+                            <div class="space-x-1">
+                                <button onclick="loadSavedChart(${chart.id})" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition">載入</button>
+                                <button onclick="deleteSavedChart(${chart.id})" class="bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition"><i class="fa-solid fa-trash-can"></i></button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            document.getElementById('load-modal').classList.remove('hidden');
+        }
+        function closeLoadModal() {
+            document.getElementById('load-modal').classList.add('hidden');
+        }
+
+        function openImportModal() {
+            document.getElementById('import-textarea').value = '';
+            document.getElementById('import-modal').classList.remove('hidden');
+        }
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.add('hidden');
+        }
+
+        function confirmImportStudents() {
+            const rawText = document.getElementById('import-textarea').value.trim();
+            if(!rawText) {
+                showModal("注意", "請輸入或貼上要匯入的名單文字！");
+                return;
+            }
+
+            const overwrite = document.getElementById('import-overwrite').checked;
+            const lines = rawText.split('\n');
+            let newStudents = overwrite ? [] : [...students];
+            let autoNumber = newStudents.length > 0 ? Math.max(...newStudents.map(s => s.number)) + 1 : 1;
+
+            let importedCount = 0;
+            lines.forEach(line => {
+                let trimmed = line.trim();
+                if(!trimmed) return;
+
+                let parts = trimmed.split(/[\s\t]+/);
+                let num = autoNumber;
+                let name = "";
+                let gender = "M";
+
+                if(parts.length >= 2 && !isNaN(parts[0])) {
+                    num = parseInt(parts[0]);
+                    name = parts[1];
+                    if(parts.length >= 3) {
+                        let gStr = parts[2].toLowerCase();
+                        if(gStr === '女' || gStr === 'f' || gStr === 'female') gender = 'F';
+                    }
+                } else if(parts.length >= 2) {
+                    name = parts[0];
+                    let gStr = parts[1].toLowerCase();
+                    if(gStr === '女' || gStr === 'f' || gStr === 'female') gender = 'F';
+                } else {
+                    name = trimmed;
+                }
+
+                if(name) {
+                    if(newStudents.some(s => s.number === num)) {
+                        num = autoNumber;
+                    }
+                    newStudents.push({
+                        id: Date.now() + Math.random(),
+                        number: num,
+                        name: name,
+                        gender: gender,
+                        tags: []
+                    });
+                    importedCount++;
+                    autoNumber = Math.max(autoNumber, num + 1);
+                }
+            });
+
+            if(importedCount === 0) {
+                showModal("注意", "未能成功解析任何有效學生名單，請檢查格式。");
+                return;
+            }
+
+            if(overwrite) {
+                conflictPairs = [];
+            }
+
+            students = newStudents;
+            students.sort((a, b) => a.number - b.number);
+            renderStudentList();
+            updateConflictDropdowns();
+            closeImportModal();
+            showModal("匯入成功", `已成功匯入 ${importedCount} 位學生！`);
+        }
+
+        function loadSavedChart(id) {
+            let savedList = JSON.parse(localStorage.getItem('classroom_saved_charts') || '[]');
+            const chart = savedList.find(c => c.id === id);
+            if(chart) {
+                students = chart.students || students;
+                document.getElementById('grid-rows').value = chart.rows;
+                document.getElementById('grid-cols').value = chart.cols;
+                document.getElementById('podium-direction').value = chart.podium || 'top';
+                currentSeating = {
+                    grid: chart.grid,
+                    rows: chart.rows,
+                    cols: chart.cols
+                };
+
+                renderStudentList();
+                updateConflictDropdowns();
+                updatePodiumPosition();
+                renderCadreAndTutorSummaries();
+                closeLoadModal();
+                showModal("載入成功", `已成功載入座位表：「${chart.name}」！`);
+            }
+        }
+
+        function deleteSavedChart(id) {
+            if(confirm("確定要刪除這筆已儲存的座位表嗎？")) {
+                let savedList = JSON.parse(localStorage.getItem('classroom_saved_charts') || '[]');
+                savedList = savedList.filter(c => c.id !== id);
+                localStorage.setItem('classroom_saved_charts', JSON.stringify(savedList));
+                openLoadModal();
+            }
+        }
+
+        // 切換身分標籤輸入框顯示
+        function toggleTagInput(type) {
+            const checkbox = document.getElementById(`tag-${type}`);
+            const wrap = document.getElementById(`${type}-input-wrap`);
+            if (checkbox.checked) {
+                wrap.classList.remove('hidden');
+            } else {
+                wrap.classList.add('hidden');
+            }
+        }
+
+        // 載入預設範例學生資料
+        function loadSampleData() {
+            const sampleData = [
+                { name: "王小明", gender: "M", cadre: "班長" },
+                { name: "李美玲", gender: "F", cadre: "風紀股長" },
+                { name: "張偉豪", gender: "M", tutor: "數學" },
+                { name: "陳怡君", gender: "F", tutor: "英文" },
+                { name: "林志豪", gender: "M" }, { name: "黃雅婷", gender: "F" },
+                { name: "吳俊傑", gender: "M" }, { name: "蔡佩如", gender: "F" },
+                { name: "楊宗翰", gender: "M" }, { name: "許淑芬", gender: "F" },
+                { name: "郭冠宇", gender: "M" }, { name: "鄭雅萍", gender: "F" },
+                { name: "謝志強", gender: "M" }, { name: "洪美惠", gender: "F" },
+                { name: "曾建國", gender: "M" }, { name: "劉秀英", gender: "F" },
+                { name: "邱信宏", gender: "M" }, { name: "方雅玲", gender: "F" },
+                { name: "廖國棟", gender: "M" }, { name: "周佳蓉", gender: "F" },
+                { name: "范姜群", gender: "M" }, { name: "江淑華", gender: "F" },
+                { name: "彭冠廷", gender: "M" }, { name: "呂怡萱", gender: "F" },
+                { name: "宋偉智", gender: "M" }, { name: "莊雅文", gender: "F" },
+                { name: "盧彥廷", gender: "M" }, { name: "柯惠君", gender: "F" },
+                { name: "魏志偉", gender: "M" }, { name: "藍心湄", gender: "F" }
+            ];
+            students = [];
+            sampleData.forEach((item, index) => {
+                let tags = [];
+                if (item.cadre) tags.push({ type: 'cadre', detail: item.cadre });
+                if (item.tutor) tags.push({ type: 'tutor', detail: item.tutor });
+                students.push({
+                    id: Date.now() + index,
+                    number: index + 1,
+                    name: item.name,
+                    gender: item.gender,
+                    tags: tags
+                });
+            });
+            renderStudentList();
+            updateConflictDropdowns();
+            showModal("載入成功", "已成功載入 30 位範例學生（含男女分開性別與預設幹部、小老師）！");
+        }
+
+        function clearAllStudents() {
+            if(confirm("確定要清空所有學生資料嗎？")) {
+                students = [];
+                conflictPairs = [];
+                renderStudentList();
+                updateConflictDropdowns();
+            }
+        }
+
+        // 新增或更新學生資料
+        function saveStudent(event) {
+            event.preventDefault();
+            const editId = document.getElementById('edit-student-id').value;
+            const num = parseInt(document.getElementById('student-number').value);
+            const name = document.getElementById('student-name').value.trim();
+            const gender = document.getElementById('student-gender').value;
+            const isCadre = document.getElementById('tag-cadre').checked;
+            const cadreTitle = document.getElementById('cadre-title').value.trim();
+            const isTutor = document.getElementById('tag-tutor').checked;
+            const tutorSubject = document.getElementById('tutor-subject').value.trim();
+
+            if(students.some(s => s.number === num && s.id.toString() !== editId)) {
+                showModal("注意", `座號 ${num} 已經存在，請使用其他座號。`);
+                return;
+            }
+
+            let tags = [];
+            if(isCadre) tags.push({ type: 'cadre', detail: cadreTitle || '幹部' });
+            if(isTutor) tags.push({ type: 'tutor', detail: tutorSubject || '小老師' });
+
+            if(editId) {
+                const st = students.find(s => s.id.toString() === editId);
+                if(st) {
+                    st.number = num;
+                    st.name = name;
+                    st.gender = gender;
+                    st.tags = tags;
+                }
+                resetStudentForm();
+            } else {
+                students.push({
+                    id: Date.now(),
+                    number: num,
+                    name: name,
+                    gender: gender,
+                    tags: tags
+                });
+                document.getElementById('student-number').value = students.length + 1;
+                document.getElementById('student-name').value = '';
+                document.getElementById('student-gender').value = 'M';
+                document.getElementById('tag-cadre').checked = false;
+                document.getElementById('cadre-title').value = '';
+                document.getElementById('cadre-input-wrap').classList.add('hidden');
+                document.getElementById('tag-tutor').checked = false;
+                document.getElementById('tutor-subject').value = '';
+                document.getElementById('tutor-input-wrap').classList.add('hidden');
+            }
+
+            students.sort((a, b) => a.number - b.number);
+            renderStudentList();
+            updateConflictDropdowns();
+        }
+
+        function editStudent(id) {
+            const st = students.find(s => s.id === id);
+            if(!st) return;
+
+            document.getElementById('edit-student-id').value = st.id;
+            document.getElementById('student-number').value = st.number;
+            document.getElementById('student-name').value = st.name;
+            document.getElementById('student-gender').value = st.gender || 'M';
+
+            const cadreTag = st.tags.find(t => t.type === 'cadre');
+            const tutorTag = st.tags.find(t => t.type === 'tutor');
+
+            if(cadreTag) {
+                document.getElementById('tag-cadre').checked = true;
+                document.getElementById('cadre-title').value = cadreTag.detail;
+                document.getElementById('cadre-input-wrap').classList.remove('hidden');
+            } else {
+                document.getElementById('tag-cadre').checked = false;
+                document.getElementById('cadre-title').value = '';
+                document.getElementById('cadre-input-wrap').classList.add('hidden');
+            }
+
+            if(tutorTag) {
+                document.getElementById('tag-tutor').checked = true;
+                document.getElementById('tutor-subject').value = tutorTag.detail;
+                document.getElementById('tutor-input-wrap').classList.remove('hidden');
+            } else {
+                document.getElementById('tag-tutor').checked = false;
+                document.getElementById('tutor-subject').value = '';
+                document.getElementById('tutor-input-wrap').classList.add('hidden');
+            }
+
+            document.getElementById('form-title-text').innerText = `編輯學生 (${st.number}號 ${st.name})`;
+            document.getElementById('submit-btn').innerText = '儲存修改';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetStudentForm() {
+            document.getElementById('edit-student-id').value = '';
+            document.getElementById('form-title-text').innerText = '新增學生資料';
+            document.getElementById('submit-btn').innerText = '加入學生';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            document.getElementById('student-number').value = students.length + 1;
+            document.getElementById('student-name').value = '';
+            document.getElementById('student-gender').value = 'M';
+            document.getElementById('tag-cadre').checked = false;
+            document.getElementById('cadre-title').value = '';
+            document.getElementById('cadre-input-wrap').classList.add('hidden');
+            document.getElementById('tag-tutor').checked = false;
+            document.getElementById('tutor-subject').value = '';
+            document.getElementById('tutor-input-wrap').classList.add('hidden');
+        }
+
+        function deleteStudent(id) {
+            students = students.filter(s => s.id !== id);
+            renderStudentList();
+            updateConflictDropdowns();
+        }
+
+        function renderStudentList() {
+            const tbody = document.getElementById('student-table-body');
+            const searchTxt = document.getElementById('student-search').value.toLowerCase();
+            tbody.innerHTML = '';
+
+            const filtered = students.filter(s => s.name.toLowerCase().includes(searchTxt) || s.number.toString().includes(searchTxt));
+            document.getElementById('student-count-badge').innerText = `${students.length} 人`;
+
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400 text-xs">沒有找到符合的學生資料</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(s => {
+                let tagsHtml = '';
+                if(s.tags && s.tags.length > 0) {
+                    s.tags.forEach(t => {
+                        if(t.type === 'cadre') {
+                            tagsHtml += `<span class="bg-amber-50 text-amber-700 text-xs px-2 py-0.5 rounded-full font-medium mr-1 inline-block mb-1">幹部: ${t.detail}</span>`;
+                        } else if(t.type === 'tutor') {
+                            tagsHtml += `<span class="bg-purple-50 text-purple-700 text-xs px-2 py-0.5 rounded-full font-medium inline-block mb-1">小老師(${t.detail})</span>`;
+                        }
+                    });
+                }
+                if(tagsHtml === '') tagsHtml = `<span class="text-slate-400 text-xs">一般生</span>`;
+
+                const genderBadge = s.gender === 'F' 
+                    ? `<span class="bg-pink-50 text-pink-600 px-2 py-0.5 rounded-full text-xs font-semibold">女</span>` 
+                    : `<span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-xs font-semibold">男</span>`;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50/50 transition">
+                        <td class="p-3 font-semibold text-slate-700">${s.number}</td>
+                        <td class="p-3 font-bold text-slate-800">${s.name}</td>
+                        <td class="p-3">${genderBadge}</td>
+                        <td class="p-3">${tagsHtml}</td>
+                        <td class="p-3 text-right space-x-1">
+                            <button onclick="editStudent(${s.id})" class="text-slate-400 hover:text-indigo-600 transition p-1" title="編輯"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button onclick="deleteStudent(${s.id})" class="text-slate-400 hover:text-red-600 transition p-1" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function updateConflictDropdowns() {
+            const sel1 = document.getElementById('conflict-student-1');
+            const sel2 = document.getElementById('conflict-student-2');
+            sel1.innerHTML = '';
+            sel2.innerHTML = '';
+
+            students.forEach(s => {
+                const opt1 = `<option value="${s.number}">${s.number}號 - ${s.name}</option>`;
+                const opt2 = `<option value="${s.number}">${s.number}號 - ${s.name}</option>`;
+                sel1.innerHTML += opt1;
+                sel2.innerHTML += opt2;
+            });
+            if(students.length > 1) sel2.selectedIndex = 1;
+            renderConflictList();
+        }
+
+        function addConflictPair() {
+            const n1 = parseInt(document.getElementById('conflict-student-1').value);
+            const n2 = parseInt(document.getElementById('conflict-student-2').value);
+
+            if(n1 === n2) {
+                showModal("注意", "不能選擇同一位學生與自己互斥。");
+                return;
+            }
+
+            const exists = conflictPairs.some(p => (p[0] === n1 && p[1] === n2) || (p[0] === n2 && p[1] === n1));
+            if(!exists) {
+                conflictPairs.push([n1, n2]);
+                renderConflictList();
+            } else {
+                showModal("注意", "此組互斥條件已經存在！");
+            }
+        }
+
+        function removeConflictPair(index) {
+            conflictPairs.splice(index, 1);
+            renderConflictList();
+        }
+
+        function renderConflictList() {
+            const container = document.getElementById('conflict-list-container');
+            container.innerHTML = '';
+
+            if(conflictPairs.length === 0) {
+                container.innerHTML = `<p class="text-xs text-slate-400 italic">尚未設定任何互斥條件</p>`;
+                return;
+            }
+
+            conflictPairs.forEach((pair, idx) => {
+                const s1 = students.find(s => s.number === pair[0]);
+                const s2 = students.find(s => s.number === pair[1]);
+                const name1 = s1 ? `${s1.number}號(${s1.name})` : `${pair[0]}號`;
+                const name2 = s2 ? `${s2.number}號(${s2.name})` : `${pair[1]}號`;
+
+                container.innerHTML += `
+                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-xl text-xs border border-slate-100">
+                        <span class="font-medium text-slate-700">${name1} ✕ ${name2}</span>
+                        <button onclick="removeConflictPair(${idx})" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-xmark"></i> 刪除</button>
+                    </div>
+                `;
+            });
+        }
+
+        // 核心排座演算法（依據講台方位與排座模式）
+        function generateSeatingChart() {
+            if(students.length === 0) {
+                showModal("提示", "請先建立學生名單再進行排座！");
+                switchTab('students');
+                return;
+            }
+
+            const cols = parseInt(document.getElementById('grid-cols').value);
+            const rows = parseInt(document.getElementById('grid-rows').value);
+            const mode = document.getElementById('allocation-mode').value;
+            const podiumDir = document.getElementById('podium-direction').value;
+            const totalSeats = cols * rows;
+
+            if(students.length > totalSeats) {
+                showModal("容量不足", `學生人數 (${students.length}人) 超過目前網格總座位數 (${totalSeats}個)，請增加行列數！`);
+                switchTab('config');
+                return;
+            }
+
+            let grid = new Array(rows).fill(null).map(() => new Array(cols).fill(null));
+
+            // 建立填充順序：嚴格從最靠近講台的排開始填充
+            let fillOrderRows = [];
+            if(podiumDir === 'top') {
+                for(let r=0; r<rows; r++) fillOrderRows.push(r);
+            } else {
+                for(let r=rows-1; r>=0; r--) fillOrderRows.push(r);
+            }
+
+            if(mode === 'checkerboard') {
+                // 梅花座：男女間隔座（前後左右相鄰優先異性）
+                let males = students.filter(s => s.gender !== 'F').sort(() => Math.random() - 0.5);
+                let females = students.filter(s => s.gender === 'F').sort(() => Math.random() - 0.5);
+
+                let seatCoords = [];
+                for(let r of fillOrderRows) {
+                    for(let c=0; c<cols; c++) {
+                        seatCoords.push({r, c});
+                    }
+                }
+
+                for(let seat of seatCoords) {
+                    let neighbors = [
+                        {r: seat.r-1, c: seat.c},
+                        {r: seat.r+1, c: seat.c},
+                        {r: seat.r, c: seat.c-1},
+                        {r: seat.r, c: seat.c+1}
+                    ];
+                    let neighborGenders = neighbors.map(n => (grid[n.r] && grid[n.r][n.c]) ? grid[n.r][n.c].gender : null).filter(Boolean);
+                    
+                    let chosen = null;
+                    let preferredPool = (neighborGenders.length > 0 && neighborGenders[0] === 'M') ? females : males;
+                    let backupPool = preferredPool === females ? males : females;
+
+                    if(preferredPool.length > 0) {
+                        chosen = preferredPool.shift();
+                    } else if(backupPool.length > 0) {
+                        chosen = backupPool.shift();
+                    }
+
+                    if(chosen) {
+                        grid[seat.r][seat.c] = chosen;
+                    }
+                }
+            } else {
+                let pool = [...students];
+                if(mode === 'cadre-front') {
+                    pool.sort((a, b) => {
+                        const aIsCadre = a.tags && a.tags.some(t => t.type === 'cadre');
+                        const bIsCadre = b.tags && b.tags.some(t => t.type === 'cadre');
+                        return (aIsCadre ? 0 : 1) - (bIsCadre ? 0 : 1);
+                    });
+                } else {
+                    pool.sort(() => Math.random() - 0.5);
+                }
+
+                let bestGrid = null;
+                let minConflicts = 999;
+
+                for(let attempt=0; attempt<150; attempt++) {
+                    let tempPool = [...pool].sort(() => Math.random() - 0.5);
+                    let tempGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(null));
+                    let sIdx = 0;
+                    for(let r of fillOrderRows) {
+                        for(let c=0; c<cols; c++) {
+                            if(sIdx < tempPool.length) tempGrid[r][c] = tempPool[sIdx++];
+                        }
+                    }
+
+                    let conflicts = countConflicts(tempGrid, rows, cols);
+                    if(conflicts === 0) {
+                        bestGrid = tempGrid;
+                        break;
+                    }
+                    if(conflicts < minConflicts) {
+                        minConflicts = conflicts;
+                        bestGrid = tempGrid;
+                    }
+                }
+                grid = bestGrid;
+            }
+
+            currentSeating = { grid, rows, cols };
+            draggedSeat = null;
+            renderSeatingDisplay();
+            renderCadreAndTutorSummaries();
+            updatePodiumPosition();
+        }
+
+        // 動態調整講台位置與排數視覺編號對應
+        function updatePodiumPosition() {
+            const direction = document.getElementById('podium-direction').value;
+            const container = document.getElementById('podium-container');
+
+            if(!container) return;
+
+            if(direction === 'top') {
+                container.className = "w-full flex justify-center order-1";
+            } else {
+                container.className = "w-full flex justify-center order-last";
+            }
+            renderSeatingDisplay();
+        }
+
+        function countConflicts(grid, rows, cols) {
+            let count = 0;
+            let posMap = {};
+            for(let r=0; r<rows; r++) {
+                for(let c=0; c<cols; c++) {
+                    if(grid[r][c]) {
+                        posMap[grid[r][c].number] = {r, c};
+                    }
+                }
+            }
+
+            conflictPairs.forEach(pair => {
+                let p1 = posMap[pair[0]];
+                let p2 = posMap[pair[1]];
+                if(p1 && p2) {
+                    let dr = Math.abs(p1.r - p2.r);
+                    let dc = Math.abs(p1.c - p2.c);
+                    if(dr <= 1 && dc <= 1) {
+                        count++;
+                    }
+                }
+            });
+            return count;
+        }
+
+        function setSeatingView(view) {
+            seatingViewMode = view;
+            const gridContainer = document.getElementById('seating-grid-container');
+            const listContainer = document.getElementById('seating-list-container');
+            const podiumContainer = document.getElementById('podium-container');
+            const swapHint = document.getElementById('swap-hint');
+            const btnGrid = document.getElementById('view-grid-btn');
+            const btnList = document.getElementById('view-list-btn');
+
+            if(view === 'grid') {
+                gridContainer.classList.remove('hidden');
+                podiumContainer.classList.remove('hidden');
+                swapHint.classList.remove('hidden');
+                listContainer.classList.add('hidden');
+                btnGrid.className = "px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold";
+                btnList.className = "px-3 py-1.5 rounded-lg text-slate-600 text-xs font-semibold hover:bg-slate-100";
+            } else {
+                gridContainer.classList.add('hidden');
+                podiumContainer.classList.add('hidden');
+                swapHint.classList.add('hidden');
+                listContainer.classList.remove('hidden');
+                btnList.className = "px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-semibold";
+                btnGrid.className = "px-3 py-1.5 rounded-lg text-slate-600 text-xs font-semibold hover:bg-slate-100";
+                renderSeatingListTable();
+            }
+        }
+
+        // 拖拉調換座位邏輯
+        function handleDragStart(e, r, c) {
+            draggedSeat = { r, c };
+            e.dataTransfer.setData('text/plain', `${r},${c}`);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDragEnter(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50/50');
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/50');
+        }
+
+        function handleDrop(e, targetR, targetC) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50/50');
+
+            if(!draggedSeat) return;
+
+            const sourceR = draggedSeat.r;
+            const sourceC = draggedSeat.c;
+
+            if(sourceR === targetR && sourceC === targetC) return;
+
+            let temp = currentSeating.grid[sourceR][sourceC];
+            currentSeating.grid[sourceR][sourceC] = currentSeating.grid[targetR][targetC];
+            currentSeating.grid[targetR][targetC] = temp;
+
+            draggedSeat = null;
+            renderSeatingDisplay();
+            renderCadreAndTutorSummaries();
+        }
+
+        function handleDragEnd(e) {
+            draggedSeat = null;
+        }
+
+        // 渲染座位視覺圖
+        function renderSeatingDisplay() {
+            if(!currentSeating.grid) return;
+            const { grid, rows, cols } = currentSeating;
+            const podiumDir = document.getElementById('podium-direction').value;
+            const showGender = document.getElementById('show-gender-badge').checked;
+            const container = document.getElementById('seating-grid-container');
+            container.innerHTML = '';
+
+            const table = document.createElement('div');
+            table.className = `grid gap-3 w-full max-w-4xl order-2`;
+            table.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+
+            for(let r=0; r<rows; r++) {
+                let displayRowLabel = podiumDir === 'top' ? (r + 1) : (rows - r);
+
+                for(let c=0; c<cols; c++) {
+                    const student = grid[r][c];
+
+                    const cell = document.createElement('div');
+                    cell.className = `seat-card bg-white p-3 rounded-xl border border-slate-200 text-center flex flex-col justify-between h-24 shadow-xs relative overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all`;
+                    
+                    cell.setAttribute('draggable', 'true');
+                    cell.ondragstart = (e) => handleDragStart(e, r, c);
+                    cell.ondragend = handleDragEnd;
+                    cell.ondragover = handleDragOver;
+                    cell.ondragenter = handleDragEnter;
+                    cell.ondragleave = handleDragLeave;
+                    cell.ondrop = (e) => handleDrop(e, r, c);
+
+                    if(student) {
+                        let tagBadge = '';
+                        if(student.tags && student.tags.length > 0) {
+                            let cadreTag = student.tags.find(t => t.type === 'cadre');
+                            let tutorTag = student.tags.find(t => t.type === 'tutor');
+                            if(cadreTag) {
+                                tagBadge += `<span class="absolute top-1 right-1 bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 rounded font-bold">${cadreTag.detail}</span>`;
+                            }
+                            if(tutorTag) {
+                                tagBadge += `<span class="absolute top-1 left-1 bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded font-bold">${tutorTag.detail}師</span>`;
+                            }
+                        }
+
+                        let genderIcon = '';
+                        if(showGender) {
+                            genderIcon = student.gender === 'F' ? '<span class="text-pink-500 font-bold ml-1">♀</span>' : '<span class="text-blue-500 font-bold ml-1">♂</span>';
+                        }
+
+                        cell.innerHTML = `
+                            ${tagBadge}
+                            <div class="text-[10px] font-bold text-slate-400 self-start">第${displayRowLabel}排-${c+1}列</div>
+                            <div class="my-auto pointer-events-none">
+                                <div class="text-xs font-bold text-indigo-600">${student.number} 號</div>
+                                <div class="text-sm font-extrabold text-slate-800 truncate">${student.name} ${genderIcon}</div>
+                            </div>
+                        `;
+                    } else {
+                        cell.className += ` bg-slate-100/60 border-dashed border-slate-300`;
+                        cell.innerHTML = `
+                            <div class="text-[10px] text-slate-400 self-start">第${displayRowLabel}排-${c+1}列</div>
+                            <div class="my-auto text-xs text-slate-400 italic pointer-events-none">空位</div>
+                        `;
+                    }
+                    table.appendChild(cell);
+                }
+            }
+            container.appendChild(table);
+        }
+
+        function renderSeatingListTable() {
+            if(!currentSeating.grid) return;
+            const { grid, rows, cols } = currentSeating;
+            const podiumDir = document.getElementById('podium-direction').value;
+            const showGender = document.getElementById('show-gender-badge').checked;
+            const tbody = document.getElementById('seating-table-body');
+            const thGender = document.getElementById('th-gender-col');
+            tbody.innerHTML = '';
+
+            if(!showGender) {
+                thGender.classList.add('hidden');
+            } else {
+                thGender.classList.remove('hidden');
+            }
+
+            for(let r=0; r<rows; r++) {
+                let displayRowLabel = podiumDir === 'top' ? (r + 1) : (rows - r);
+                for(let c=0; c<cols; c++) {
+                    const student = grid[r][c];
+                    if(student) {
+                        let tagsTxt = '一般生';
+                        if(student.tags && student.tags.length > 0) {
+                            tagsTxt = student.tags.map(t => t.type === 'cadre' ? `幹部(${t.detail})` : `小老師(${t.detail})`).join(', ');
+                        }
+                        const genderStr = student.gender === 'F' ? '女' : '男';
+                        const genderTd = showGender ? `<td class="p-3">${genderStr}</td>` : '';
+
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-slate-50 transition">
+                                <td class="p-3 font-medium text-slate-500">第 ${displayRowLabel} 排 - 第${c+1}列</td>
+                                <td class="p-3 font-bold text-indigo-600">${student.number} 號</td>
+                                <td class="p-3 font-extrabold text-slate-800">${student.name}</td>
+                                ${genderTd}
+                                <td class="p-3"><span class="bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded-full">${tagsTxt}</span></td>
+                            </tr>
+                        `;
+                    }
+                }
+            }
+        }
+
+        function renderCadreAndTutorSummaries() {
+            if(!currentSeating.grid) return;
+            const { grid, rows, cols } = currentSeating;
+            const podiumDir = document.getElementById('podium-direction').value;
+            
+            let posMap = {};
+            for(let r=0; r<rows; r++) {
+                let displayRowLabel = podiumDir === 'top' ? (r + 1) : (rows - r);
+                for(let c=0; c<cols; c++) {
+                    const st = grid[r][c];
+                    if(st) {
+                        posMap[st.number] = `第 ${displayRowLabel} 排 / 第 ${c+1} 列`;
+                    }
+                }
+            }
+
+            const cadreTbody = document.getElementById('cadre-summary-tbody');
+            const tutorTbody = document.getElementById('tutor-summary-tbody');
+            cadreTbody.innerHTML = '';
+            tutorTbody.innerHTML = '';
+
+            let cadreCount = 0;
+            let tutorCount = 0;
+
+            students.forEach(s => {
+                if(s.tags && s.tags.length > 0) {
+                    s.tags.forEach(t => {
+                        const seatLoc = posMap[s.number] || '未安排';
+                        if(t.type === 'cadre') {
+                            cadreCount++;
+                            cadreTbody.innerHTML += `
+                                <tr class="hover:bg-amber-50/50">
+                                    <td class="p-2 font-bold text-amber-800">${t.detail}</td>
+                                    <td class="p-2 font-semibold text-slate-600">${s.number} 號</td>
+                                    <td class="p-2 font-extrabold text-slate-800">${s.name}</td>
+                                    <td class="p-2 text-indigo-600 font-medium">${seatLoc}</td>
+                                </tr>
+                            `;
+                        } else if(t.type === 'tutor') {
+                            tutorCount++;
+                            tutorTbody.innerHTML += `
+                                <tr class="hover:bg-purple-50/50">
+                                    <td class="p-2 font-bold text-purple-800">${t.detail}</td>
+                                    <td class="p-2 font-semibold text-slate-600">${s.number} 號</td>
+                                    <td class="p-2 font-extrabold text-slate-800">${s.name}</td>
+                                    <td class="p-2 text-indigo-600 font-medium">${seatLoc}</td>
+                                </tr>
+                            `;
+                        }
+                    });
+                }
+            });
+
+            if(cadreCount === 0) {
+                cadreTbody.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-slate-400 italic">無幹部資料</td></tr>`;
+            }
+            if(tutorCount === 0) {
+                tutorTbody.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-slate-400 italic">無小老師資料</td></tr>`;
+            }
+        }
+
+        function exportToWord() {
+            if(!currentSeating.grid) {
+                showModal("提示", "目前尚無排好的座位表可供匯出！");
+                return;
+            }
+
+            const showGender = document.getElementById('show-gender-badge').checked;
+            const podiumDir = document.getElementById('podium-direction').value;
+
+            let podiumHtml = `<div class="podium">講 台</div>`;
+            const { grid, rows, cols } = currentSeating;
+
+            let gridTableHtml = `<table class="table">`;
+            for(let r=0; r<rows; r++) {
+                let displayRowLabel = podiumDir === 'top' ? (r + 1) : (rows - r);
+                gridTableHtml += `<tr>`;
+                for(let c=0; c<cols; c++) {
+                    const student = grid[r][c];
+                    if(student) {
+                        let tagStr = '';
+                        if(student.tags && student.tags.length > 0) {
+                            tagStr = student.tags.map(t => `<span class="badge">${t.type === 'cadre' ? t.detail : t.detail + '師'}</span>`).join(' ');
+                        }
+                        const gText = showGender ? `(${student.gender === 'F' ? '女' : '男'})` : '';
+                        gridTableHtml += `<td><div class="num">第${displayRowLabel}排-${c+1}列</div><div class="name">${student.name} ${gText}</div><div class="num">${student.number}號</div>${tagStr}</td>`;
+                    } else {
+                        gridTableHtml += `<td><div class="num">第${displayRowLabel}排-${c+1}列</div><div style="color:#ccc;">(空位)</div></td>`;
+                    }
+                }
+                gridTableHtml += `</tr>`;
+            }
+            gridTableHtml += `</table>`;
+
+            let htmlContent = `
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+                <head><meta charset="utf-8"><title>教室座位表與總表</title>
+                <style>
+                    body { font-family: 'Microsoft JhengHei', Arial, sans-serif; }
+                    h2 { text-align: center; color: #333; }
+                    h3 { color: #444; border-bottom: 2px solid #ddd; padding-bottom: 5px; margin-top: 30px; }
+                    .table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; }
+                    .table td { border: 1px solid #bbb; padding: 10px; text-align: center; width: 16.66%; height: 65px; vertical-align: middle; }
+                    .num { font-size: 8pt; color: #666; }
+                    .name { font-size: 12pt; font-weight: bold; color: #111; margin-top: 2px; }
+                    .badge { font-size: 7pt; background: #eee; padding: 2px 4px; border-radius: 4px; color: #333; display: inline-block; margin-top: 2px; }
+                    .podium { background: #333; color: #fff; text-align: center; padding: 8px; font-weight: bold; margin: 10px 0; letter-spacing: 5px; }
+                    .summary-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                    .summary-table th, .summary-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 10pt; }
+                    .summary-table th { background: #f5f5f5; }
+                </style>
+                </head>
+                <body>
+                <h2>班級座位表</h2>
+            `;
+
+            // 依據講台方位決定 Word 內講台的位置
+            if(podiumDir === 'top') {
+                htmlContent += podiumHtml + gridTableHtml;
+            } else {
+                htmlContent += gridTableHtml + podiumHtml;
+            }
+
+            htmlContent += `<h3>班級幹部總表</h3><table class="summary-table"><tr><th>職位</th><th>座號</th><th>姓名</th><th>座位位置</th></tr>`;
+            let posMap = {};
+            for(let r=0; r<rows; r++) {
+                let displayRowLabel = podiumDir === 'top' ? (r + 1) : (rows - r);
+                for(let c=0; c<cols; c++) {
+                    const st = grid[r][c];
+                    if(st) {
+                        posMap[st.number] = `第 ${displayRowLabel} 排 / 第 ${c+1} 列`;
+                    }
+                }
+            }
+
+            students.forEach(s => {
+                if(s.tags) {
+                    s.tags.filter(t => t.type === 'cadre').forEach(t => {
+                        htmlContent += `<tr><td><b>${t.detail}</b></td><td>${s.number}號</td><td>${s.name}</td><td>${posMap[s.number] || '未安排'}</td></tr>`;
+                    });
+                }
+            });
+            htmlContent += `</table>`;
+
+            htmlContent += `<h3>小老師總表</h3><table class="summary-table"><tr><th>科目</th><th>座號</th><th>姓名</th><th>座位位置</th></tr>`;
+            students.forEach(s => {
+                if(s.tags) {
+                    s.tags.filter(t => t.type === 'tutor').forEach(t => {
+                        htmlContent += `<tr><td><b>${t.detail}</b></td><td>${s.number}號</td><td>${s.name}</td><td>${posMap[s.number] || '未安排'}</td></tr>`;
+                    });
+                }
+            });
+            htmlContent += `</table>`;
+
+            htmlContent += `</body></html>`;
+
+            const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `教室座位與總表_${new Date().toISOString().slice(0,10)}.doc`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function exportToCSV() {
+            if(!currentSeating.grid) {
+                showModal("提示", "目前尚無排好的座位表可供匯出！");
+                return;
+            }
+
+            const showGender = document.getElementById('show-gender-badge').checked;
+            let csv = '\ufeff排數,列數,座號,姓名' + (showGender ? ',性別' : '') + ',身分與職位/科目\n';
+            const { grid, rows, cols } = currentSeating;
+            const podiumDir = document.getElementById('podium-direction').value;
+
+            for(let r=0; r<rows; r++) {
+                let displayRowLabel = podiumDir === 'top' ? (r + 1) : (rows - r);
+                for(let c=0; c<cols; c++) {
+                    const student = grid[r][c];
+                    if(student) {
+                        let tag = '一般生';
+                        if(student.tags && student.tags.length > 0) {
+                            tag = student.tags.map(t => t.type === 'cadre' ? `幹部(${t.detail})` : `小老師(${t.detail})`).join('/');
+                        }
+                        const gStr = student.gender === 'F' ? '女' : '男';
+                        csv += `第${displayRowLabel}排,第${c+1}列,${student.number},${student.name}` + (showGender ? `,${gStr}` : '') + `,${tag}\n`;
+                    } else {
+                        csv += `第${displayRowLabel}排,第${c+1}列,,(空位)` + (showGender ? ',' : '') + `,\n`;
+                    }
+                }
+            }
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `教室座位清單_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
